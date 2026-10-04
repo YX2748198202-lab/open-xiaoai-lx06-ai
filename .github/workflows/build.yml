@@ -1,0 +1,61 @@
+name: Build LX06 Standalone AI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'install-standalone-ai.sh'
+      - 'ai.conf.example'
+      - '.github/workflows/build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ARMv7 standalone-ai
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabihf
+          components: rustfmt
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cross build --release --target armv7-unknown-linux-gnueabihf --bin standalone-ai
+
+      - name: Verify ELF
+        run: |
+          file target/armv7-unknown-linux-gnueabihf/release/standalone-ai
+          test -x target/armv7-unknown-linux-gnueabihf/release/standalone-ai
+
+      - name: Package
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          cp target/armv7-unknown-linux-gnueabihf/release/standalone-ai dist/standalone-ai
+          cp install-standalone-ai.sh dist/install-standalone-ai.sh
+          cp ai.conf.example dist/ai.conf.example
+          chmod 755 dist/standalone-ai dist/install-standalone-ai.sh
+          tar -czf lx06-standalone-ai.tar.gz -C dist standalone-ai install-standalone-ai.sh ai.conf.example
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lx06-standalone-ai
+          path: lx06-standalone-ai.tar.gz
+          if-no-files-found: error
+          retention-days: 30

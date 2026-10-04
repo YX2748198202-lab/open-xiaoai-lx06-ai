@@ -187,9 +187,9 @@ ASR_LOG_PATHS=/tmp/mico_aivs_lab/instruction.log,/tmp/log/messages
 至少配置：
 
 ```ini
-BASE_URL=https://api.xiaomimimo.com/v1
-API_KEY=你的APIKey
-MODEL=mimo-v2.6-flash
+BASE_URL=
+API_KEY=
+MODEL=
 ```
 
 程序会自动请求：

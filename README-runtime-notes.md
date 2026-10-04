@@ -1,4 +1,4 @@
-# LX06 Standalone AI
+# Xiaomi XiaoAI Standalone AI
 
 音箱本机运行；电脑/手机仅用于开发维护，不需要常驻服务器。
 

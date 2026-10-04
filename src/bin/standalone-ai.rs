@@ -1,4 +1,5 @@
 use open_xiaoai::base::AppError;
+use open_xiaoai::platform::DeviceModel;
 use open_xiaoai::services::monitor::file::{FileMonitor, FileMonitorEvent};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -26,6 +27,7 @@ fn default_system_prompt() -> String {
 
 #[derive(Clone)]
 struct Config {
+    device_model: DeviceModel,
     base_url: String,
     api_key: String,
     model: String,
@@ -36,11 +38,13 @@ struct Config {
     abort_delay_ms: u64,
     tts_timeout_seconds: u64,
     request_headers: Vec<(String, String)>,
+    asr_log_paths: Option<Vec<String>>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            device_model: DeviceModel::default(),
             base_url: "https://api.openai.com/v1".to_string(),
             api_key: String::new(),
             model: "gpt-4.1-mini".to_string(),
@@ -51,6 +55,7 @@ impl Default for Config {
             abort_delay_ms: 400,
             tts_timeout_seconds: 120,
             request_headers: Vec::new(),
+            asr_log_paths: None,
         }
     }
 }
@@ -73,6 +78,10 @@ impl Config {
             let value = value.trim().trim_matches('"');
 
             match key {
+                "DEVICE_MODEL" => {
+                    config.device_model =
+                        DeviceModel::parse(value).map_err(|err| -> AppError { err.into() })?;
+                }
                 "BASE_URL" => config.base_url = value.to_string(),
                 "API_KEY" => config.api_key = value.to_string(),
                 "MODEL" => config.model = value.to_string(),
@@ -84,6 +93,17 @@ impl Config {
                 }
                 "ABORT_DELAY_MS" => config.abort_delay_ms = value.parse().unwrap_or(400),
                 "TTS_TIMEOUT_SECONDS" => config.tts_timeout_seconds = value.parse().unwrap_or(120),
+                "ASR_LOG_PATHS" => {
+                    let paths = value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|path| !path.is_empty())
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>();
+                    if !paths.is_empty() {
+                        config.asr_log_paths = Some(paths);
+                    }
+                }
                 _ if key.starts_with("HEADER_") => {
                     if let Some((name, header_value)) = value.split_once(':') {
                         config
@@ -115,6 +135,16 @@ impl Config {
         }
 
         Ok(config)
+    }
+
+    fn monitor_paths(&self) -> Vec<String> {
+        self.asr_log_paths.clone().unwrap_or_else(|| {
+            self.device_model
+                .monitor_paths()
+                .iter()
+                .map(|path| (*path).to_string())
+                .collect()
+        })
     }
 
     fn endpoint(&self) -> String {
@@ -312,9 +342,9 @@ async fn main() {
     };
 
     if check_config {
-        println!("config OK; model={}; api_key_configured={}; timeout={}s; abort_delay={}ms; max_chars={}",
-            config.model, api_key_configured(&config), config.request_timeout_seconds,
-            config.abort_delay_ms, config.max_response_chars);
+        println!("config OK; device={}; model={}; api_key_configured={}; timeout={}s; abort_delay={}ms; max_chars={}",
+            config.device_model.name(), config.model, api_key_configured(&config),
+            config.request_timeout_seconds, config.abort_delay_ms, config.max_response_chars);
         return;
     }
     if let Some(text) = ask {
@@ -326,18 +356,22 @@ async fn main() {
         }
         return;
     }
+    println!("device: {}", config.device_model.name());
+    if config.device_model == DeviceModel::Oh2p {
+        println!("warning: OH2P profile is experimental; verify ASR, TTS, native fallback and startup on real hardware");
+    }
     println!("API endpoint: {}", config.endpoint());
     println!("model: {}", config.model);
     println!("waiting for XiaoAI SpeechRecognizer events...");
 
     let state = Arc::new(Mutex::new(State::default()));
     let mut monitors = Vec::new();
-    for path in ["/tmp/mico_aivs_lab/instruction.log", "/tmp/log/messages"] {
+    for path in config.monitor_paths() {
         let state_for_callback = Arc::clone(&state);
         let config_for_callback = Arc::clone(&config);
         let mut monitor = FileMonitor::new();
         monitor
-            .start(path, move |event| {
+            .start(&path, move |event| {
                 let state = Arc::clone(&state_for_callback);
                 let config = Arc::clone(&config_for_callback);
                 async move {
@@ -464,7 +498,7 @@ async fn handle_user_text(
     let result = async {
         println!("route: LLM; model={}", config.model);
         println!("user: {text}");
-        if let Err(err) = abort_xiaoai().await {
+        if let Err(err) = abort_xiaoai(&config.device_model).await {
             state.lock().await.native_fallback_until =
                 Some(Instant::now() + NATIVE_FALLBACK_COOLDOWN);
             eprintln!("takeover failed: {err}; no AI reply or replay; native cooldown 300s");
@@ -492,7 +526,7 @@ async fn handle_user_text(
                 }
                 println!("assistant: {answer}");
                 let tts_started = Instant::now();
-                speak_text(&answer, config.tts_timeout_seconds).await?;
+                speak_text(&answer, config.tts_timeout_seconds, &config.device_model).await?;
                 println!(
                     "tts: accepted; tts_ms={}; total_ms={} (not playback duration)",
                     tts_started.elapsed().as_millis(),
@@ -537,7 +571,7 @@ async fn handle_user_text(
                 if let Some(notice) = notice {
                     // No immediate replay: native TTS could interrupt this warning.
                     println!("notice: {}; interval=1800s; native cooldown=300s", kind.label());
-                    match speak_text(notice, 20).await {
+                    match speak_text(notice, 20, &config.device_model).await {
                         Ok(()) => {
                             println!("notice: accepted; next spoken question stays native during cooldown");
                             return Ok(());
@@ -546,7 +580,7 @@ async fn handle_user_text(
                     }
                 }
                 if state.lock().await.generation != generation { return Ok(()); }
-                ask_native_xiaoai(&text).await?;
+                ask_native_xiaoai(&text, &config.device_model).await?;
                 println!(
                     "native fallback: accepted; total_ms={}",
                     started.elapsed().as_millis()
@@ -679,7 +713,7 @@ fn is_native_control_command(text: &str) -> bool {
             || t.contains("帮我"))
 }
 
-async fn ask_native_xiaoai(text: &str) -> Result<(), AppError> {
+async fn ask_native_xiaoai(text: &str, device: &DeviceModel) -> Result<(), AppError> {
     let request = json!({
         "tts": 1,
         "nlp": 1,
@@ -690,8 +724,8 @@ async fn ask_native_xiaoai(text: &str) -> Result<(), AppError> {
         .arg("-t")
         .arg("25")
         .arg("call")
-        .arg("mibrain")
-        .arg("ai_service")
+        .arg(device.ubus_object())
+        .arg(device.ai_method())
         .arg(request.to_string())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -750,8 +784,8 @@ fn trim_history(history: &mut Vec<HistoryMessage>, max_messages: usize) {
     }
 }
 
-async fn abort_xiaoai() -> Result<(), AppError> {
-    let child = Command::new("/etc/init.d/mico_aivs_lab")
+async fn abort_xiaoai(device: &DeviceModel) -> Result<(), AppError> {
+    let child = Command::new(device.native_service())
         .arg("restart")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -774,7 +808,11 @@ fn check_ubus_response(body: &[u8], method: &str) -> Result<(), AppError> {
     }
 }
 
-async fn speak_text(text: &str, timeout_seconds: u64) -> Result<(), AppError> {
+async fn speak_text(
+    text: &str,
+    timeout_seconds: u64,
+    device: &DeviceModel,
+) -> Result<(), AppError> {
     if text.trim().is_empty() {
         return Ok(());
     }
@@ -787,8 +825,8 @@ async fn speak_text(text: &str, timeout_seconds: u64) -> Result<(), AppError> {
         .arg("-t")
         .arg(timeout_seconds.max(5).to_string())
         .arg("call")
-        .arg("mibrain")
-        .arg("text_to_speech")
+        .arg(device.ubus_object())
+        .arg(device.tts_method())
         .arg(request.to_string())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -881,7 +919,7 @@ async fn request_chat_completion(
             .arg("--max-time")
             .arg(seconds.to_string())
             .arg("--write-out")
-            .arg("\nLX06_HTTP_STATUS:%{http_code}")
+            .arg("\nSTANDALONE_AI_HTTP_STATUS:%{http_code}")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -902,7 +940,7 @@ async fn request_chat_completion(
         }
         let raw = String::from_utf8(output.stdout)?;
         let (body, status) = raw
-            .rsplit_once("\nLX06_HTTP_STATUS:")
+            .rsplit_once("\nSTANDALONE_AI_HTTP_STATUS:")
             .ok_or("missing HTTP status")?;
         let status: u16 = status.trim().parse()?;
         parse_api_http_response(body, status, config.max_response_chars)

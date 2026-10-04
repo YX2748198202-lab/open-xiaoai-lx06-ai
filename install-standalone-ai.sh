@@ -32,6 +32,7 @@ mv -f "$BIN.new" "$BIN"
 
 if [ ! -f "$CONF" ]; then
   cat > "$CONF" <<'CFG'
+DEVICE_MODEL=LX06
 BASE_URL=https://api.openai.com/v1
 API_KEY=CHANGE_ME
 MODEL=gpt-4.1-mini

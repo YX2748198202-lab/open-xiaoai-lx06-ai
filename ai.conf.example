@@ -1,3 +1,5 @@
+DEVICE_MODEL=LX06
+
 # OpenAI-compatible API base URL. The program appends /chat/completions automatically.
 BASE_URL=https://api.openai.com/v1
 
@@ -23,3 +25,6 @@ TTS_TIMEOUT_SECONDS=120
 
 # Optional extra HTTP headers. Example:
 # HEADER_1=x-api-version: 2025-01-01
+
+# Optional override for firmware-specific ASR log paths.
+# ASR_LOG_PATHS=/tmp/mico_aivs_lab/instruction.log,/tmp/log/messages

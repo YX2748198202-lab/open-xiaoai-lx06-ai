@@ -76,5 +76,5 @@ killall standalone-ai 2>/dev/null || true
 sleep 1
 "$START"
 
-echo "Standalone AI installed and started."
+echo "XiaoAI Remix installed and started."
 echo "Edit: $CONF"

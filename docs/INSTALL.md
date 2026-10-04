@@ -1,4 +1,4 @@
-# Xiaomi XiaoAI 安装教程
+# XiaoAI Remix 安装教程
 
 ## 当前支持建议
 
@@ -55,7 +55,7 @@ aarch64
 在 GitHub Actions 中选择：
 
 ```text
-Build Xiaomi XiaoAI Standalone AI
+Build XiaoAI Remix
 ```
 
 LX06 下载：

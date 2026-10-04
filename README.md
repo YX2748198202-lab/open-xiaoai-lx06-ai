@@ -1,4 +1,4 @@
-# Xiaomi XiaoAI Standalone AI
+# XiaoAI Remix
 
 在小米小爱音箱系列本机运行的独立中文 AI 客户端。
 

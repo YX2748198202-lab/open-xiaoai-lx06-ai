@@ -1,4 +1,4 @@
-name: Build Xiaomi XiaoAI Standalone AI
+name: Build XiaoAI Remix
 
 on:
   workflow_dispatch:

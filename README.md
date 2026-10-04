@@ -56,6 +56,17 @@ standalone-ai
 
 API 请求、Prompt、多轮历史、路由和 fallback 逻辑由各设备共用；设备架构、ASR 日志路径、原生服务和 TTS 接口通过 `src/platform.rs` 集中管理。
 
+## 发行版
+
+每个正式版本会提供 GitHub Release：
+
+- `xiaoai-remix-lx06-vX.Y.Z.tar.gz`：LX06 ARMv7，已验证设备使用；
+- `xiaoai-remix-oh2p-vX.Y.Z-experimental.tar.gz`：OH2P AArch64，实验性构建，仅供真实设备验证。
+
+发行版由推送 `vX.Y.Z` 标签自动生成。普通分支构建产生的是 Actions Artifact，不是正式发行版。
+
+目前 LX06 和 OH2P 使用同一套源码，但二进制架构不同，下载时必须选择匹配设备的压缩包。
+
 ## 快速安装
 
 ### LX06

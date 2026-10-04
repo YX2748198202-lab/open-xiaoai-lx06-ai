@@ -1,5 +1,14 @@
 # XiaoAI Remix 安装教程
 
+## 发行版与 Artifact
+
+正式版本位于 GitHub Releases。推送 `vX.Y.Z` 标签后，Release 工作流会自动生成：
+
+- `xiaoai-remix-lx06-vX.Y.Z.tar.gz`：LX06 ARMv7；
+- `xiaoai-remix-oh2p-vX.Y.Z-experimental.tar.gz`：OH2P AArch64 实验性构建。
+
+普通分支 Push 产生的是 Actions Artifact，不是 GitHub 发行版。
+
 ## 当前支持建议
 
 当前推荐先安装到已完成实机验证的 LX06。
